@@ -1,6 +1,7 @@
 import React from "react";
 import { Meta, Story } from "@storybook/react";
 import Carousel from "../Carousel";
+import CarouselItem from "../CarouselItem";
 
 export default {
   title: "Example/Carousel",
@@ -9,9 +10,12 @@ export default {
 
 const Template: Story<any> = (args) => (
   <Carousel {...args}>
-    <div style={{ backgroundColor: "lightcoral", height: "200px" }}>Card 1</div>
-    <div style={{ backgroundColor: "lightblue", height: "200px" }}>Card 2</div>
-    <div style={{ backgroundColor: "lightgreen", height: "200px" }}>Card 3</div>
+    {new Array(4).fill(0).map((item, index) => (
+      <CarouselItem>
+        <h2>{`Card ${index + 1}`}</h2>
+        {`Content ${index + 1}`}
+      </CarouselItem>
+    ))}
   </Carousel>
 );
 

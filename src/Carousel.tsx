@@ -6,10 +6,13 @@ interface CarouselProps {
   isInfinite?: boolean;
   interval?: number;
   error?: string;
+  count?: number;
 }
 
-const CarouselContainer = styled.div`
+const CarouselContainer = styled.div<{ isInfinite: boolean }>`
   position: relative;
+  display: flex;
+  justify-content: ${({ isInfinite }) => (isInfinite ? `center` : `start`)};
   overflow: hidden;
 `;
 
@@ -17,7 +20,7 @@ const CarouselTrack = styled.div<{ translateX: number; deltaX: number }>`
   display: flex;
   transform: ${({ translateX, deltaX }) =>
     `translateX(${translateX + deltaX}px)`};
-  transition: ${({ deltaX }) => `transform ${deltaX ? "0" : "0.3"}s ease-out`};
+  transition: ${({ deltaX }) => `transform ${deltaX ? "0" : "0.8"}s ease-out`};
 `;
 
 const CarouselButton = styled.button`
@@ -51,6 +54,7 @@ const Carousel: React.FC<CarouselProps> = ({
   isInfinite = false,
   interval = 3000,
   error = "",
+  count = 21,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [trackWidth, setTrackWidth] = useState(0);
@@ -60,15 +64,41 @@ const Carousel: React.FC<CarouselProps> = ({
   const [errors, setErrors] = useState(error);
   const trackRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef<false>;
+  const [cardCount, setCardCount] = useState(count);
+  const [altChildren, setAltChildren] = useState<ReactNode[]>([]);
+  const [transitioning, setTransitioning] = useState(false);
 
   const handleNext = () => {
-    if (!isInfinite && currentIndex >= children.length - 1) return;
-    setCurrentIndex((prev) => (prev + 1) % children.length);
+    if (isInfinite) setCurrentIndex(1);
+    else
+      setCurrentIndex(
+        currentIndex < children.length - 1
+          ? currentIndex + 1
+          : children.length - 1
+      );
+    setTimeout(() => {
+      if (isInfinite) {
+        const firstChild = altChildren.shift();
+        setAltChildren([...altChildren, firstChild]);
+        setCurrentIndex(0);
+      } else {
+        setTransitioning(false);
+      }
+    }, 800);
   };
 
   const handlePrev = () => {
-    if (!isInfinite && currentIndex <= 0) return;
-    setCurrentIndex((prev) => (prev - 1 + children.length) % children.length);
+    if (isInfinite) setCurrentIndex(-1);
+    else setCurrentIndex(currentIndex - 1 > 0 ? currentIndex - 1 : 0);
+    setTimeout(() => {
+      if (isInfinite) {
+        const lastChild = altChildren.pop();
+        setAltChildren([lastChild, ...altChildren]);
+        setCurrentIndex(0);
+      } else {
+        setTransitioning(false);
+      }
+    }, 800);
   };
 
   const runInfinite = () => {
@@ -124,22 +154,74 @@ const Carousel: React.FC<CarouselProps> = ({
 
     setDeltaX(0);
     if (pointX > touchStartPoint) {
-      if (index > 0) setCurrentIndex(index - 1);
+      handlePrev();
     } else if (pointX < touchStartPoint) {
-      if (index < children.length) setCurrentIndex(index + 1);
+      handleNext();
     }
   };
 
-  useEffect(() => {
-    if (trackRef.current) {
-      setTrackWidth(trackRef.current.offsetWidth);
+  const checkCardCount = () => {
+    if (isInfinite) {
+      if (count >= children.length)
+        setCardCount(
+          (prev) => Math.ceil(count / children.length) * children.length
+        );
+      else setCardCount((prev) => children.length);
+    } else {
+      setCardCount(children.length);
     }
-    checkCardWidth();
-    if (isInfinite) runInfinite();
+  };
+
+  const getOdd = (array: ReactNode[]) => {
+    const result = [...array];
+    if (isInfinite) result.pop();
+    return result;
+  };
+
+  useEffect(() => {
+    checkCardCount();
   }, []);
 
+  useEffect(() => {
+    if (isInfinite) {
+      const iterates = Math.floor(cardCount / children.length);
+      let elements: ReactNode[] = [];
+      new Array(iterates).fill(0).map((item, index) => {
+        elements = [...elements, ...children];
+      });
+      setAltChildren(elements);
+    } else {
+      setAltChildren([...children]);
+    }
+  }, [cardCount]);
+
+  useEffect(() => {
+    if (trackRef.current && trackRef.current.children[0]) {
+      setTrackWidth(trackRef.current.children[0].clientWidth);
+      checkCardWidth();
+    }
+  }, [altChildren]);
+
+  useEffect(() => {
+    if (currentIndex) {
+      setTransitioning(true);
+      setTimeout(() => {
+        if (trackRef.current && isInfinite)
+          trackRef.current.style.transition = "none";
+      }, 800);
+    } else {
+      setTransitioning(false);
+      if (trackRef.current && isInfinite) {
+        trackRef.current.style.transition = `transform ${deltaX ? "0" : "0.8"}s ease-out`;
+      }
+    }
+  }, [currentIndex]);
+
+  useEffect(() => {
+    checkCardCount();
+  }, [isInfinite]);
   return (
-    <CarouselContainer>
+    <CarouselContainer isInfinite={isInfinite}>
       {errors ? (
         <ErrorContainer>{errors}</ErrorContainer>
       ) : (
@@ -149,31 +231,39 @@ const Carousel: React.FC<CarouselProps> = ({
             deltaX={deltaX}
             ref={trackRef}
           >
-            {children.map((child, index) => (
-              <div
-                key={index}
-                style={{ minWidth: "100%" }}
-                onTouchStart={(event) => handleTouchStart(event, index)}
-                onTouchMove={(event) => handleTouchMove(event, index)}
-                onTouchEnd={(event) => handleTouchEnd(event, index)}
-              >
-                {child}
-              </div>
-            ))}
+            {altChildren.length % 2
+              ? altChildren.map((child, index) => (
+                  <div
+                    key={index}
+                    onTouchStart={(event) => handleTouchStart(event, index)}
+                    onTouchMove={(event) => handleTouchMove(event, index)}
+                    onTouchEnd={(event) => handleTouchEnd(event, index)}
+                  >
+                    {child}
+                  </div>
+                ))
+              : getOdd(altChildren).map((child, index) => (
+                  <div
+                    key={index}
+                    onTouchStart={(event) => handleTouchStart(event, index)}
+                    onTouchMove={(event) => handleTouchMove(event, index)}
+                    onTouchEnd={(event) => handleTouchEnd(event, index)}
+                  >
+                    {child}
+                  </div>
+                ))}
           </CarouselTrack>
           <CarouselButton
             onClick={handlePrev}
-            disabled={!isInfinite && currentIndex === 0}
             style={{ left: 0 }}
-            hidden={isInfinite}
+            disabled={transitioning}
           >
             Prev
           </CarouselButton>
           <CarouselButton
             onClick={handleNext}
-            disabled={!isInfinite && currentIndex === children.length - 1}
             style={{ right: 0 }}
-            hidden={isInfinite}
+            disabled={transitioning}
           >
             Next
           </CarouselButton>
